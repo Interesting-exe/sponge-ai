@@ -33,6 +33,7 @@ public class AIThing : MonoBehaviour
     [SerializeField] private string uberDuckKey;
 
     [SerializeField] private AudioSource audioSource;
+    
     [SerializeField] private CinemachineVirtualCamera _cinemachineVirtualCamera;
     [SerializeField] private TextMeshProUGUI subtitles;
     [SerializeField] private VideoPlayer videoPlayer;
@@ -54,10 +55,18 @@ public class AIThing : MonoBehaviour
         string topic = topics[_random.Next(0, topics.Count)];
         
         //play the timecards/intro
-        videoPlayer.clip = _clips[_random.Next(0, _clips.Count)];
-        videoPlayer.Play();
+        if (_clips.Count > 0)
+        {
+            videoPlayer.clip = _clips[_random.Next(0, _clips.Count)];
+            videoPlayer.Play();
+            StartCoroutine(waitForTransition(topic));
+        }
+        else
+        {
+            Generate(topic);
+        }
 
-        StartCoroutine(waitForTransition(topic));
+        
     }
 
     private IEnumerator waitForTransition(string topic)
@@ -231,10 +240,14 @@ public class AIThing : MonoBehaviour
         {
             yield return null;
         }
-        Transform t = GameObject.Find(d.character).transform;
-        _cinemachineVirtualCamera.LookAt = t;
-        _cinemachineVirtualCamera.Follow = t;
-        subtitles.text = d.text;
+
+        if (_cinemachineVirtualCamera != null)
+        {
+            Transform t = GameObject.Find(d.character).transform;
+            _cinemachineVirtualCamera.LookAt = t;
+            _cinemachineVirtualCamera.Follow = t;
+            subtitles.text = d.text;
+        }
 
         var v = JsonConvert.DeserializeObject<StatusResponse>(_client.GetAsync($"https://api.uberduck.ai/speak-status?uuid={d.uuid}").Result.Content.ReadAsStringAsync().Result);
         
