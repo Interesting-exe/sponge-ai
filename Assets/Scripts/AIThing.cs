@@ -206,6 +206,7 @@ public class AIThing : MonoBehaviour
         string s = File.ReadAllText("Assets/Scripts/Next.txt");
         
         //loads scene based on characters in the script
+        //change scene names and if statements to match your shit
         if (s.Contains("Mr. Krabs:") && s.Contains("Squidward:") && s.Contains("Sandy:"))
             SceneManager.LoadScene("All");
         else if (s.Contains("Sandy:"))
