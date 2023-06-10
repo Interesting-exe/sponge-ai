@@ -81,8 +81,10 @@ public class AIThing : MonoBehaviour
 
     async void Generate(string topic)
     {
-        var text = File.ReadAllLines("Assets/Scripts/Next.txt");
-        
+        string[] text = new []{""};
+        if(File.Exists("Assets/Scripts/Next.txt"))
+            text = File.ReadAllLines("Assets/Scripts/Next.txt");
+
         //delete the script from the file so you don't get the same script twice
         File.WriteAllText("Assets/Scripts/Next.txt", "");
         List<Dialogue> dialogues = new List<Dialogue>();
