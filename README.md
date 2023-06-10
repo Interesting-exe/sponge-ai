@@ -1,5 +1,5 @@
 # sponge-ai
-my version of [sponge ai](https://www.youtube.com/@ai_sponge_).
+inspired by [ai sponge](https://www.youtube.com/@ai_sponge_).
 
 # Requirements
 [uberduck api key and secret](http://uberduck.ai)
