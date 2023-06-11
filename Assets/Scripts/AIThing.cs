@@ -47,7 +47,7 @@ public class AIThing : MonoBehaviour
         _openAI = new OpenAIApi(openAIKey);
         
         _client.DefaultRequestHeaders.Add("Authorization", $"Basic {Convert.ToBase64String(Encoding.UTF8.GetBytes($"{uberDuckKey}:{uberDuckSecret}"))}");
-
+        
         //pick a random topic from the topics.json file
         List<string> topics =
             JsonConvert.DeserializeObject<List<string>>(
@@ -66,7 +66,7 @@ public class AIThing : MonoBehaviour
             Generate(topic);
         }
 
-        
+
     }
 
     private IEnumerator waitForTransition(string topic)
@@ -243,13 +243,15 @@ public class AIThing : MonoBehaviour
             yield return null;
         }
 
-        if (_cinemachineVirtualCamera != null)
+        if (GameObject.Find(d.character) != null && _cinemachineVirtualCamera != null)
         {
             Transform t = GameObject.Find(d.character).transform;
             _cinemachineVirtualCamera.LookAt = t;
             _cinemachineVirtualCamera.Follow = t;
-            subtitles.text = d.text;
         }
+        
+        if(subtitles != null)
+            subtitles.text = d.text;
 
         var v = JsonConvert.DeserializeObject<StatusResponse>(_client.GetAsync($"https://api.uberduck.ai/speak-status?uuid={d.uuid}").Result.Content.ReadAsStringAsync().Result);
         
