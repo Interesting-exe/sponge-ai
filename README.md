@@ -8,6 +8,9 @@ inspired by [ai sponge](https://www.youtube.com/watch?v=b4cJjkI5uGw).
 
 [OpenAI-Unity](https://github.com/srcnalt/OpenAI-Unity/releases/tag/v0.1.13) by [srcnalt](https://github.com/srcnalt)
 
+# Tutorial
+https://www.youtube.com/watch?v=XrYNB16SNQQ
+
 # How to use
 create an empty game object and add the AIThing script to it.
 
