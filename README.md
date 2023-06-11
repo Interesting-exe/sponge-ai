@@ -1,5 +1,5 @@
 # sponge-ai
-my version of [sponge ai](https://www.youtube.com/@ai_sponge_).
+inspired by [ai sponge](https://www.youtube.com/watch?v=b4cJjkI5uGw).
 
 # Requirements
 [uberduck api key and secret](http://uberduck.ai)
@@ -19,5 +19,8 @@ for subtitles and video player to work create a canvas and add a textmeshpro and
 
 # Preview
 
-https://github.com/Interesting-exe/sponge-ai/assets/52731127/f50f9a44-267a-40fe-8340-c61db8665303
+
+
+
+https://github.com/Interesting-exe/sponge-ai/assets/52731127/367a02e5-0012-4951-8217-698715116fcd
 
