@@ -175,7 +175,7 @@ public class AIThing : MonoBehaviour
         {
             Model = "text-davinci-003",
             Prompt =
-                $"write me a spongebob episode about {topic}. only write the dialogue.",
+                $"Create a script for a scene from Spongebob where characters discuss a topic. Possible Characters Include Spongebob, Patrick, Squidward, Sandy, Mr. Krabs, Larry The Lobster and very rarely Gary, Plankton and Mrs. Puff. Use the format: Character: <dialogue>. Only reply with character dialogue. Around 10-14 lines of dialogue with talking only. The topic is: {topic}", // improve prompt for ai so it can use more characters (the same prompt as the official ai sponge, it will make the same format ai moments)
             MaxTokens = 350
         };
         var response = await _openAI.CreateCompletion(request);
