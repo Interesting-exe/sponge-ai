@@ -1,10 +1,8 @@
 using System;
-using System.Buffers.Text;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
@@ -15,10 +13,8 @@ using UnityEngine;
 using Random = System.Random;
 using OpenAI;
 using TMPro;
-using Unity.VisualScripting;
 using UnityEngine.Networking;
 using UnityEngine.SceneManagement;
-using UnityEngine.UI;
 using UnityEngine.Video;
 
 #pragma warning disable CS4014
@@ -29,65 +25,105 @@ public class AIThing : MonoBehaviour
 
     //should probably change this to a safer method of storing the keys
     [SerializeField] private string openAIKey;
-    [SerializeField] private string uberDuckSecret;
-    [SerializeField] private string uberDuckKey;
+    [SerializeField] private string fakeYouUsernameOrEMail;
+    [SerializeField] private string fakeYouPassword;
 
     [SerializeField] private AudioSource audioSource;
-    
+
     [SerializeField] private CinemachineVirtualCamera _cinemachineVirtualCamera;
     [SerializeField] private TextMeshProUGUI subtitles;
     [SerializeField] private VideoPlayer videoPlayer;
     [SerializeField] private List<VideoClip> _clips;
-    private HttpClient _client = new ();
+    
+    [SerializeField] private float maxIdleTime = 20f;
+    private float _idleTime = 0f;
+
+    private HttpClient _client = new();
     private OpenAIApi _openAI;
+    private Queue<Dialogue> _dialogues = new();
+    private bool _finished = false;
+    private string _cookie = "";
 
     // Start is called before the first frame update
-    void Start()
+    async void Start()
     {
         _openAI = new OpenAIApi(openAIKey);
         
-        _client.DefaultRequestHeaders.Add("Authorization", $"Basic {Convert.ToBase64String(Encoding.UTF8.GetBytes($"{uberDuckKey}:{uberDuckSecret}"))}");
-        
-        //pick a random topic from the topics.json file
-        List<string> topics =
-            JsonConvert.DeserializeObject<List<string>>(
-                File.ReadAllText($"{Environment.CurrentDirectory}\\Assets\\Scripts\\topics.json"));
-        string topic = topics[_random.Next(0, topics.Count)];
-        
-        //play the timecards/intro
-        if (_clips.Count > 0)
+
+        if (!File.Exists($"{Environment.CurrentDirectory}\\Assets\\Scripts\\key.txt"))
+            File.WriteAllText($"{Environment.CurrentDirectory}\\Assets\\Scripts\\key.txt", "");
+
+        _cookie = File.ReadAllText($"{Environment.CurrentDirectory}\\Assets\\Scripts\\key.txt");
+
+        if (_cookie == "")
         {
-            videoPlayer.clip = _clips[_random.Next(0, _clips.Count)];
-            videoPlayer.Play();
-            StartCoroutine(waitForTransition(topic));
-        }
-        else
-        {
-            Generate(topic);
+            File.Delete($"{Environment.CurrentDirectory}\\Assets\\Scripts\\key.txt");
+            File.WriteAllText($"{Environment.CurrentDirectory}\\Assets\\Scripts\\key.txt", "");
+            var obj =
+                    new
+                    {
+                        username_or_email = fakeYouUsernameOrEMail,
+                        password = fakeYouPassword
+                    };
+
+                var response = await _client.PostAsync("https://api.fakeyou.com/login",
+                    new StringContent(JsonConvert.SerializeObject(obj), Encoding.UTF8, "application/json"));
+                var d = JsonConvert.SerializeObject(response.Headers.GetValues("set-cookie").First());
+                var l = d.Split(';');
+                _cookie = l[0];
+                _cookie = _cookie.Replace("\"", "");
+                File.WriteAllText($"{Environment.CurrentDirectory}\\Assets\\Scripts\\key.txt", _cookie);
         }
 
-
+        // pick a random topic from the topics.json file
+         List<string> topics =
+             JsonConvert.DeserializeObject<List<string>>(
+                 File.ReadAllText($"{Environment.CurrentDirectory}\\Assets\\Scripts\\topics.json"));
+         string topic = topics[_random.Next(0, topics.Count)];
+        
+         //play the timecards/intro
+         if (_clips.Count > 0)
+         {
+             videoPlayer.clip = _clips[_random.Next(0, _clips.Count)];
+             videoPlayer.Play();
+             StartCoroutine(WaitForTransition(topic));
+         }
+         else
+         {
+             Generate(topic);
+         }
     }
 
-    private IEnumerator waitForTransition(string topic)
+    private void FixedUpdate()
     {
-        while (videoPlayer.isPlaying)
-        {
-            yield return null;
-        }
-        
+        if (Time.deltaTime - _idleTime > maxIdleTime && _idleTime != 0f)
+            StartCoroutine(LoadNext());
+    }
+
+
+    private IEnumerator WaitForTransition(string topic)
+    {
+        while (!videoPlayer.isPlaying) yield return null;
+        UnityWebRequest uwr = new UnityWebRequest("https://api.fakeyou.com/v1/billing/active_subscriptions", "GET");
+        uwr.SetRequestHeader("Cookie", _cookie);
+        uwr.downloadHandler = new DownloadHandlerBuffer();
+        yield return uwr.SendWebRequest();
+        string checkString = uwr.downloadHandler.text;
+        Debug.Log(checkString);
+        uwr.Dispose();
+
         Generate(topic);
     }
+    
 
     async void Generate(string topic)
     {
-        string[] text = new []{""};
-        if(File.Exists("Assets/Scripts/Next.txt"))
+        string[] text = new[] {""};
+        if (File.Exists("Assets/Scripts/Next.txt"))
             text = File.ReadAllLines("Assets/Scripts/Next.txt");
 
         //delete the script from the file so you don't get the same script twice
         File.WriteAllText("Assets/Scripts/Next.txt", "");
-        List<Dialogue> dialogues = new List<Dialogue>();
 
         if (text.Length == 0)
         {
@@ -104,186 +140,263 @@ public class AIThing : MonoBehaviour
             GenerateNext(topic);
         }
 
+        StartCoroutine(DoPost(text));
+    }
+
+    private IEnumerator DoPost(string[] text)
+    {
+        StartCoroutine(Speak());
         foreach (var line in text)
         {
             string voicemodelUuid = "";
             string textToSay = "";
             string character = "";
-            //change the following if statements to match the characters you want to use
+            
+            // if line starts with character here
             if (line.StartsWith("SpongeBob:"))
             {
                 textToSay = line.Replace("SpongeBob:", "");
-                voicemodelUuid = "2231cbd3-15a5-4571-9299-b58f36062c45";
+                voicemodelUuid = "TM:618j8qwddnsn";
                 character = "spongebob";
             }
             else if (line.StartsWith("Spongebob:"))
             {
                 textToSay = line.Replace("Spongebob:", "");
-                voicemodelUuid = "2231cbd3-15a5-4571-9299-b58f36062c45";
+                voicemodelUuid = "TM:618j8qwddnsn";
                 character = "spongebob";
             }
             else if (line.StartsWith("Patrick:"))
             {
                 textToSay = line.Replace("Patrick:", "");
-                voicemodelUuid = "3b2755d1-11e2-4112-b75b-01c47560fb9c";
+                voicemodelUuid = "TM:ptcaavcfhwxd";
                 character = "patrick";
             }
             else if (line.StartsWith("Mr. Krabs"))
             {
-                voicemodelUuid = "8270ecfc-1491-433e-b4c2-26c1accfe3f0";
+                voicemodelUuid = "TM:ade4ta7rc720";
                 textToSay = line.Replace("Mr. Krabs", "");
                 character = "mrkrabs";
             }
             else if (line.StartsWith("Squidward:"))
             {
-                voicemodelUuid = "42b30e65-f4cb-4962-ac87-06f3671ccbe4";
+                voicemodelUuid = "TM:4e2xqpwqaggr";
                 textToSay = line.Replace("Squidward:", "").ToUpper(); //converting to caps because funny loudward
                 character = "squidward";
             }
             else if (line.StartsWith("Sandy:"))
             {
-                voicemodelUuid = "fd030eea-d80f-4125-8af6-5d28ce21eff6";
+                voicemodelUuid = "TM:eaachm5yecgz";
                 textToSay = line.Replace("Sandy:", "");
                 character = "sandy";
             }
-            if(textToSay == "")
+
+
+            if (textToSay == "")
                 continue;
+            
+            while (textToSay.Replace(" ", "").Length < 3)
+                textToSay += ".";
+            
 
             var jsonObj =
                 new
                 {
-                    speech = textToSay,
-                    voicemodel_uuid = voicemodelUuid,
+                    inference_text = textToSay,
+                    tts_model_token = voicemodelUuid,
+                    uuid_idempotency_token = Guid.NewGuid().ToString()
                 };
-            var content = new StringContent(JsonConvert.SerializeObject(jsonObj), Encoding.UTF8, "application/json");
-            var response2 = await _client.PostAsync("https://api.uberduck.ai/speak", content);
-            var responseString = await response2.Content.ReadAsStringAsync();
-            dialogues.Add(new Dialogue
+            bool retry = true;
+            while (retry)
             {
-                uuid = JsonConvert.DeserializeObject<SpeakResponse>(responseString).uuid,
-                text = textToSay,
-                character = character
-            });
+                UnityWebRequest uwr = new UnityWebRequest("https://api.fakeyou.com/tts/inference", "POST");
+                uwr.SetRequestHeader("Cookie", _cookie);
+                uwr.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(jsonObj)));
+                uwr.downloadHandler = new DownloadHandlerBuffer();
+                uwr.SetRequestHeader("Accept", "application/json");
+                uwr.SetRequestHeader("Content-Type", "application/json");
+                yield return uwr.SendWebRequest();
+                string responseString = uwr.downloadHandler.text;
+                
+                Debug.Log(responseString);
+                if (responseString.Contains("too short"))
+                    break;
+                SpeakResponse speakResponse = JsonConvert.DeserializeObject<SpeakResponse>(responseString);
+                
+                uwr.Dispose();
+                if (!speakResponse.success)
+                {
+                    yield return new WaitForSecondsRealtime(1.5f);
+                    continue;
+                }
+
+                retry = false;
+                
+                _dialogues.Enqueue(new Dialogue
+                {
+                    uuid = speakResponse.inference_job_token,
+                    text = textToSay,
+                    character = character,
+                    model = voicemodelUuid,
+                });
+                yield return new WaitForSecondsRealtime(1.5f);
+            }
         }
-        StartCoroutine(Speak(dialogues));
+        _finished = true;
     }
 
     private async Task GenerateNext(string topic)
     {
-        //change prompt to whatever you want
-        var request = new CreateCompletionRequest
+        try
         {
-            Model = "text-davinci-003",
-            Prompt =
-                $"write me a spongebob episode about {topic}. only write the dialogue.",
-            MaxTokens = 350
-        };
-        var response = await _openAI.CreateCompletion(request);
-        if (response.Error != null || response.Choices == null)
+            //change prompt to whatever you want
+            var request = new CreateCompletionRequest
+            {
+                Model = "text-davinci-003",
+                Prompt =
+                    $"Create a script for a scene from Spongebob where characters discuss a topic. Possible Characters Include Spongebob, Patrick, Squidward, Sandy, Mr. Krabs, Larry The Lobster and very rarely Gary, Plankton and Mrs. Puff. Use the format: Character: <dialogue>. Only reply with character dialogue. Around 10-14 lines of dialogue with talking only. The topic is: {topic}",
+                MaxTokens = 350
+            };
+            var response = await _openAI.CreateCompletion(request);
+            if (response.Error != null || response.Choices == null)
+            {
+                GenerateNext(topic);
+            }
+            else
+            {
+                var text = response.Choices[0].Text;
+                File.WriteAllText("Assets/Scripts/Next.txt", text);
+            }
+        }
+        catch (Exception e)
         {
+            Debug.Log(e);
             GenerateNext(topic);
         }
-        else
+    }
+
+    private IEnumerator Speak()
+    {
+        while (videoPlayer.isPlaying) yield return null;
+        videoPlayer.gameObject.SetActive(false);
+        while(_dialogues.Count == 0 && !_finished)
+            yield return null;
+        if (_dialogues.Count > 0)
         {
-            var text = response.Choices[0].Text;
-            File.WriteAllText("Assets/Scripts/Next.txt", text);
+            _idleTime = Time.deltaTime;
+            yield return Speak(_dialogues.Dequeue());
+            StartCoroutine(Speak());
+        }
+        else if(_finished)
+        {
+            StartCoroutine(LoadNext());
         }
     }
-    
-    private IEnumerator Speak(List<Dialogue> l)
-    {
-        videoPlayer.gameObject.SetActive(false);
-        foreach (var dialogue in l)
-        {
-            yield return Speak(dialogue);
-        }
 
+
+    private IEnumerator LoadNext()
+    {
         //wait for GenerateNext to finish
         while (File.ReadAllText("Assets/Scripts/Next.txt") == "")
         {
             yield return null;
         }
+
         string s = File.ReadAllText("Assets/Scripts/Next.txt");
-        
+
         //loads scene based on characters in the script
         //change scene names and if statements to match your shit
-        if (s.Contains("Mr. Krabs:") && s.Contains("Squidward:") && s.Contains("Sandy:"))
-            SceneManager.LoadScene("All");
-        else if (s.Contains("Sandy:"))
-        {
-            if(s.Contains("Squidward:"))
-                SceneManager.LoadScene("SandySquidward");
-            else if(s.Contains("Mr. Krabs:"))
-                SceneManager.LoadScene("SandyMrKrabs");
-            else
-                SceneManager.LoadScene("Sandy");
-        }
-        else if (s.Contains("Squidward:"))
-        {
-            if(s.Contains("Mr. Krabs:"))
-                SceneManager.LoadScene("SquidwardMrKrabs");
-            else
-                SceneManager.LoadScene("Squidward");
-        }
-        else if (s.Contains("Mr. Krabs:"))
-        {
-            SceneManager.LoadScene("SquidwardMrKrabs");
-        }
-        else
-        {
-            SceneManager.LoadScene("Squidward");
-        }
-        
+        SceneManager.LoadScene("All");
     }
-    
 
     private IEnumerator Speak(Dialogue d)
     {
-        while (JsonConvert.DeserializeObject<StatusResponse>(_client.GetAsync($"https://api.uberduck.ai/speak-status?uuid={d.uuid}").Result.Content.ReadAsStringAsync().Result).path == null)
-        {
-            yield return null;
-        }
-
-        if (GameObject.Find(d.character) != null && _cinemachineVirtualCamera != null)
-        {
-            Transform t = GameObject.Find(d.character).transform;
-            _cinemachineVirtualCamera.LookAt = t;
-            _cinemachineVirtualCamera.Follow = t;
-        }
+        UnityWebRequest uwr = new UnityWebRequest($"https://api.fakeyou.com/tts/job/{d.uuid}", "GET");
+        uwr.SetRequestHeader("Cookie", _cookie);
         
-        if(subtitles != null)
-            subtitles.text = d.text;
+        uwr.downloadHandler = new DownloadHandlerBuffer();
+        yield return uwr.SendWebRequest();
+        string responseString = uwr.downloadHandler.text;
+        uwr.Dispose();
+        GetResponse v = JsonConvert.DeserializeObject<GetResponse>(responseString);
 
-        var v = JsonConvert.DeserializeObject<StatusResponse>(_client.GetAsync($"https://api.uberduck.ai/speak-status?uuid={d.uuid}").Result.Content.ReadAsStringAsync().Result);
-        
-        using (var uwr = UnityWebRequestMultimedia.GetAudioClip(v.path, AudioType.WAV)) //https://docs.unity3d.com/ScriptReference/Networking.UnityWebRequestMultimedia.GetAudioClip.html
+        if (v.state == null || v.state.status == "pending" || v.state.status == "started")
         {
-            yield return uwr.SendWebRequest();
-            if (uwr.result == UnityWebRequest.Result.ConnectionError)
+            yield return new WaitForSeconds(1f); // for rate limiting
+            yield return Speak(d);
+        }
+        else if (v.state.status == "complete_success")
+        {
+            if (GameObject.Find(d.character) != null && _cinemachineVirtualCamera != null)
             {
-                Debug.Log(uwr.error);
+                Transform t = GameObject.Find(d.character).transform;
+                _cinemachineVirtualCamera.LookAt = t;
+                _cinemachineVirtualCamera.Follow = t;
             }
-            else
+            
+            if (subtitles != null)
+                subtitles.text = d.text;
+
+            using (var uwr2 = UnityWebRequestMultimedia.GetAudioClip($"https://storage.googleapis.com/vocodes-public{v.state.maybe_public_bucket_wav_audio_path}",
+                AudioType.WAV)) //https://docs.unity3d.com/ScriptReference/Networking.UnityWebRequestMultimedia.GetAudioClip.html
             {
-                audioSource.clip = DownloadHandlerAudioClip.GetContent(uwr);
-                //funny loudward
-                if (d.character == "squidward")
+                yield return uwr2.SendWebRequest();
+                if (uwr2.result == UnityWebRequest.Result.ConnectionError)
                 {
-                    float[] clipData = new float[audioSource.clip.samples * audioSource.clip.channels];
-                    audioSource.clip.GetData(clipData, 0);
-                    for (int i = 0; i < clipData.Length; i++)
-                    {
-                        clipData[i] *= 1.5f;
-                    }
-
-                    audioSource.clip.SetData(clipData, 0);
+                    Debug.Log(uwr.error);
                 }
+                else
+                {
+                    audioSource.clip = DownloadHandlerAudioClip.GetContent(uwr2);
+                    //funny loudward
+                    if (d.character == "squidward")
+                    {
+                        float[] clipData = new float[audioSource.clip.samples * audioSource.clip.channels];
+                        audioSource.clip.GetData(clipData, 0);
+                        for (int i = 0; i < clipData.Length; i++)
+                        {
+                            clipData[i] *= 2.0f;
+                        }
 
-                audioSource.Play();
-                while(audioSource.isPlaying)
-                    yield return null;
+                        audioSource.clip.SetData(clipData, 0);
+                    }
+                    uwr2.Dispose();
+                    audioSource.Play();
+                    while (audioSource.isPlaying)
+                        yield return null;
+                }
+        }
+        }
+        else
+        {
+            var jsonObj =
+                new
+                {
+                    inference_text = d.text,
+                    tts_model_token = d.model,
+                    uuid_idempotency_token = Guid.NewGuid().ToString()
+                };
+            var newContent = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(jsonObj));
+            bool retry = true;
+            while (retry)
+            {
+                UnityWebRequest uwr3 = new UnityWebRequest("https://api.fakeyou.com/tts/inference", "POST");
+                uwr3.SetRequestHeader("Cookie", _cookie);
+                uwr3.uploadHandler = new UploadHandlerRaw(newContent);
+                uwr3.downloadHandler = new DownloadHandlerBuffer();
+                uwr3.SetRequestHeader("Content-Type", "application/json");
+                yield return uwr3.SendWebRequest();
+                responseString = uwr3.downloadHandler.text;
+                uwr3.Dispose();
+                SpeakResponse speakResponse = JsonConvert.DeserializeObject<SpeakResponse>(responseString);
+                if (speakResponse.success)
+                {
+                    d.uuid = speakResponse.inference_job_token;
+                    retry = false;
+                    StartCoroutine(Speak(d));
+                }
+                
+                yield return new WaitForSecondsRealtime(1f);
             }
         }
-        
     }
 }
