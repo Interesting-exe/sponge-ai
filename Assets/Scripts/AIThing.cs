@@ -272,7 +272,6 @@ public class AIThing : MonoBehaviour
             yield return null;
         if (_dialogues.Count > 0)
         {
-            _idleTime = Time.deltaTime;
             yield return Speak(_dialogues.Dequeue());
             StartCoroutine(Speak());
         }
