@@ -34,9 +34,6 @@ public class AIThing : MonoBehaviour
     [SerializeField] private TextMeshProUGUI subtitles;
     [SerializeField] private VideoPlayer videoPlayer;
     [SerializeField] private List<VideoClip> _clips;
-    
-    [SerializeField] private float maxIdleTime = 20f;
-    private float _idleTime = 0f;
 
     private HttpClient _client = new();
     private OpenAIApi _openAI;
@@ -92,12 +89,6 @@ public class AIThing : MonoBehaviour
          {
              Generate(topic);
          }
-    }
-
-    private void FixedUpdate()
-    {
-        if (Time.deltaTime - _idleTime > maxIdleTime && _idleTime != 0f)
-            StartCoroutine(LoadNext());
     }
 
 
