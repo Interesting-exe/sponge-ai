@@ -1,3 +1,6 @@
+# Archived
+lost interest check out [Pork's version](https://github.com/PorkDevMode/AiSponge)
+
 # sponge-ai
 inspired by [ai sponge](https://www.youtube.com/watch?v=b4cJjkI5uGw).
 
